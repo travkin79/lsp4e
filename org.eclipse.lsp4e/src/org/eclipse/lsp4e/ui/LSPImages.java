@@ -14,6 +14,7 @@ package org.eclipse.lsp4e.ui;
 
 import java.net.URL;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -502,7 +503,7 @@ public final class LSPImages {
 	 *
 	 * @see #getImageFor(SymbolKind, List, boolean, int)
 	 */
-	public static @Nullable Image getImageFor(SymbolKind symbolKind, List<SymbolTag> symbolTags) {
+	public static @Nullable Image getImageFor(@Nullable SymbolKind symbolKind, @Nullable List<SymbolTag> symbolTags) {
 		return getImageFor(symbolKind, symbolTags, false, -1);
 	}
 
@@ -518,8 +519,16 @@ public final class LSPImages {
 	 * @param severity one of -1, {@link IMarker#SEVERITY_WARNING}, and {@link IMarker#SEVERITY_ERROR}. -1 indicates no overlay icon.
 	 * @return a new or cached image for the given symbol kind with overlay icons computed for the given arguments.
 	 */
-	public static @Nullable Image getImageFor(SymbolKind symbolKind, List<SymbolTag> symbolTags,
+	public static @Nullable Image getImageFor(@Nullable SymbolKind symbolKind, @Nullable List<SymbolTag> symbolTags,
 			boolean deprecated, int severity) {
+
+		if (symbolKind == null) {
+			return EMPTY_IMAGE;
+		}
+
+		if (symbolTags == null) {
+			symbolTags = Collections.emptyList();
+		}
 
 		ImageDescriptor severityImageDescriptor = getOverlayForMarkerSeverity(severity);
 		ImageDescriptor visibilityImageDescriptor = getOverlayForVisibility(symbolTags);
