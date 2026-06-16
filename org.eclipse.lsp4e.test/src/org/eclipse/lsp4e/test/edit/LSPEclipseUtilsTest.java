@@ -74,6 +74,7 @@ import org.eclipse.swt.widgets.Control;
 import org.eclipse.ui.IEditorPart;
 import org.eclipse.ui.ide.IDE;
 import org.eclipse.ui.texteditor.AbstractTextEditor;
+import org.eclipse.ui.texteditor.ITextEditor;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledOnOs;
 import org.junit.jupiter.api.condition.EnabledOnOs;
@@ -351,7 +352,52 @@ public class LSPEclipseUtilsTest extends AbstractTestWithProject {
 		// Ensure there is an authority and no malformed quadruple slashes
 		assertFalse(uriWithSpaces.toString().startsWith("file:////"));
 	}
-    
+	
+	/**
+	 * Verifies that {@code toUri(IEditorInput)} returns a non-file URI as-is,
+	 * without incorrectly converting its path component to a file:// URI.
+	 */
+	@Test
+	void testToUri_IEditorInput_DoesNotModifyNonFileUris() {
+		URI jdtUri = URI.create("jdt://contents/rt.jar/java.lang/String.class?=project/src");
+		URIEditorInput input = new URIEditorInput(jdtUri);
+
+		URI resolved = LSPEclipseUtils.toUri(input);
+		assertEquals(jdtUri, resolved,
+				"toUri(IEditorInput) should return non-file URIs unchanged");
+	}
+	
+	/**
+	 * Verifies that {@code toUri(IDocument)} still works via the buffer manager
+	 * path for a standard file-backed editor (regression test).
+	 */
+	@Test
+	void testToUri_IDocument_StandardFileEditorStillWorks() throws Exception {
+		IFile file = TestUtils.createFile(project, "Test.lspt", "content");
+		IEditorPart openedEditor = TestUtils.openEditor(file);
+		assertNotNull(openedEditor);
+
+		ITextEditor textEditor = (ITextEditor) openedEditor;
+		IDocument document = textEditor.getDocumentProvider().getDocument(textEditor.getEditorInput());
+		assertNotNull(document);
+
+		URI resolved = LSPEclipseUtils.toUri(document);
+		assertNotNull(resolved, "toUri should resolve file-backed documents via buffer manager");
+		assertEquals("file", resolved.getScheme());
+	}
+
+	/**
+	 * Verifies that {@code toUri(IDocument)} returns null for a document that
+	 * is neither buffer-managed nor associated with any open editor.
+	 */
+	@Test
+	void testToUri_IDocument_UnassociatedDocumentReturnsNull() {
+		IDocument orphanDocument = new org.eclipse.jface.text.Document("orphan");
+		URI resolved = LSPEclipseUtils.toUri(orphanDocument);
+		assertNull(resolved,
+				"toUri should return null for documents not associated with any editor or buffer");
+	}
+	
 	@Test
 	void testFileUriWithNonAsciiPath() throws Exception {
 		// File name contains a German Eszett and a Japanese Kana

@@ -295,5 +295,10 @@
               name="Non Buffer Editor"
               class="org.eclipse.lsp4e.test.edit.NonBufferEditor">
         </editor>
+        <editor
+             id="org.eclipse.lsp4e.test.edit.uriTextEditor"
+             name="URI Text Editor"
+             class="org.eclipse.lsp4e.test.edit.URITextEditor">
+        </editor>
      </extension>
 </fragment>
