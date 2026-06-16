@@ -48,6 +48,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.eclipse.core.filebuffers.FileBuffers;
 import org.eclipse.core.filebuffers.IFileBuffer;
@@ -415,10 +416,45 @@ public final class LSPEclipseUtils {
 		} else if (buffer != null && buffer.getFileStore() != null) {
 			return buffer.getFileStore().toURI();
 		}
+
+		URI uri = getUriFromEditorInput(document);
+		if (uri != null) {
+			return uri;
+		}
+
 		if (isNonBufferedFileHandlingEnabled()) {
 			return Adapters.adapt(document, URI.class, true);
 		}
 		return null;
+	}
+
+	/**
+	 * Searches open editors for one whose document provider returns the given
+	 * document, then extracts the URI from that editor's input via
+	 * {@link #toUri(IEditorInput)}.
+	 *
+	 * <p>This covers editors whose documents are not managed by {@code BufferManager}
+	 * (e.g. JDT's {@code ClassFileEditor} with {@code IURIEditorInput} returning
+	 * {@code jdt://} URIs, non-buffered Xtext editors, etc.).</p>
+	 *
+	 * @param document the document to find an editor for
+	 * @return the URI from the matching editor's input, or {@code null}
+	 */
+	private static @Nullable URI getUriFromEditorInput(IDocument document) {
+		return getOpenEditorReferences()
+			.map(ref -> ref.getEditor(false))
+			.filter(ITextEditor.class::isInstance)
+			.map(ITextEditor.class::cast)
+			.filter(textEditor -> {
+				IDocumentProvider provider = textEditor.getDocumentProvider();
+				IEditorInput editorInput = textEditor.getEditorInput();
+				return provider != null && editorInput != null
+						&& provider.getDocument(editorInput) == document;
+			})
+			.map(textEditor -> toUri(textEditor.getEditorInput()))
+			.filter(Objects::nonNull)
+			.findFirst()
+			.orElse(null);
 	}
 
 	private static @Nullable IPath toPath(@Nullable IFileBuffer buffer) {
@@ -1579,11 +1615,7 @@ public final class LSPEclipseUtils {
 		if (uri == null) {
 			return Collections.emptySet();
 		}
-		return Arrays.stream(PlatformUI.getWorkbench().getWorkbenchWindows())
-			.map(IWorkbenchWindow::getPages)
-			.flatMap(Arrays::stream)
-			.map(IWorkbenchPage::getEditorReferences)
-			.flatMap(Arrays::stream)
+		return getOpenEditorReferences()
 			.filter(ref -> {
 				try {
 					return uri.equals(toUri(ref.getEditorInput()));
@@ -1594,6 +1626,14 @@ public final class LSPEclipseUtils {
 			})
 			.collect(Collectors.toSet());
 	}
+	
+	private static Stream<IEditorReference> getOpenEditorReferences() {
+		return Arrays.stream(PlatformUI.getWorkbench().getWorkbenchWindows())
+			.map(IWorkbenchWindow::getPages)
+			.flatMap(Arrays::stream)
+			.map(IWorkbenchPage::getEditorReferences)
+			.flatMap(Arrays::stream);
+	}
 
 	public static @Nullable URI toUri(IEditorInput editorInput) {
 		if (editorInput instanceof FileEditorInput fileEditorInput) {
@@ -1601,7 +1641,13 @@ public final class LSPEclipseUtils {
 		}
 		if (editorInput instanceof IURIEditorInput uriEditorInput) {
 			URI uri = uriEditorInput.getURI();
-			return uri.getPath() != null ? toUri(Path.fromPortableString(uri.getPath())) : uri;
+			String scheme = uri.getScheme();
+			if (scheme == null || FILE_SCHEME.equals(scheme)) {
+				// file:// or scheme-less URI — convert path to proper file URI
+				return uri.getPath() != null ? toUri(Path.fromPortableString(uri.getPath())) : uri;
+			}
+			// Non-file scheme (e.g. jdt://, zip://) — return as-is
+			return uri;
 		}
 		return null;
 	}
